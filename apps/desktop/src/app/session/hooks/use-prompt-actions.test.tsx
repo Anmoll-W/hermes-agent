@@ -3,13 +3,27 @@ import type { MutableRefObject } from 'react'
 import { useEffect } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { $sessions, setSessions } from '@/store/session'
+import type { HermesConnection } from '@/global'
+import type * as HermesModule from '@/hermes'
+import { $sessions, setConnection, setSessions } from '@/store/session'
+import { openUpdatesWindow } from '@/store/updates'
 import type { SessionInfo } from '@/types/hermes'
 
 import { usePromptActions } from './use-prompt-actions'
 
-vi.mock('@/hermes', () => ({
-  transcribeAudio: vi.fn()
+// Spread the real module (its functions are import-safe; side effects only run
+// when called) and override only the network-touching transcribeAudio. A
+// hand-listed partial mock breaks as soon as another store imported into this
+// graph (e.g. profile.ts → setApiRequestProfile at module init) reaches for a
+// new @/hermes export.
+vi.mock('@/hermes', async importOriginal => {
+  const actual = await importOriginal<typeof HermesModule>()
+
+  return { ...actual, transcribeAudio: vi.fn() }
+})
+
+vi.mock('@/store/updates', () => ({
+  openUpdatesWindow: vi.fn()
 }))
 
 // The active id the desktop holds is the *runtime* session id from
@@ -90,6 +104,7 @@ describe('usePromptActions /title', () => {
 
   it('renames via the session.title RPC (with the runtime id), updates the sidebar store, and refreshes', async () => {
     const refreshSessions = vi.fn(async () => undefined)
+
     const requestGateway = vi.fn(async (method: string) =>
       (method === 'session.title' ? { pending: false, title: 'New title' } : {}) as never
     )
@@ -113,6 +128,7 @@ describe('usePromptActions /title', () => {
 
   it('reports the queued state when the session row is not persisted yet', async () => {
     const refreshSessions = vi.fn(async () => undefined)
+
     const requestGateway = vi.fn(async (method: string) =>
       (method === 'session.title' ? { pending: true, title: 'Fresh chat' } : {}) as never
     )
@@ -146,6 +162,7 @@ describe('usePromptActions /title', () => {
 
   it('surfaces a rename error without touching the sidebar store', async () => {
     const refreshSessions = vi.fn(async () => undefined)
+
     const requestGateway = vi.fn(async (method: string) => {
       if (method === 'session.title') {
         throw new Error('Title too long')
@@ -162,5 +179,47 @@ describe('usePromptActions /title', () => {
     expect(requestGateway).toHaveBeenCalledWith('session.title', expect.objectContaining({ title: 'way too long title' }))
     expect(refreshSessions).not.toHaveBeenCalled()
     expect($sessions.get()[0]?.title).toBe('Old title')
+  })
+})
+
+describe('usePromptActions /update', () => {
+  beforeEach(() => {
+    setSessions(() => [sessionInfo()])
+    setConnection(() => null)
+  })
+
+  afterEach(() => {
+    cleanup()
+    vi.restoreAllMocks()
+    vi.mocked(openUpdatesWindow).mockClear()
+    setConnection(() => null)
+  })
+
+  it('opens the native updater overlay for a local backend (no slash worker)', async () => {
+    setConnection(() => ({ mode: 'local' }) as HermesConnection)
+    const refreshSessions = vi.fn(async () => undefined)
+    const requestGateway = vi.fn(async () => ({}) as never)
+
+    let handle: HarnessHandle | null = null
+    render(<Harness onReady={h => (handle = h)} refreshSessions={refreshSessions} requestGateway={requestGateway} />)
+
+    await handle!.submitText('/update')
+
+    expect(openUpdatesWindow).toHaveBeenCalledTimes(1)
+    expect(requestGateway).not.toHaveBeenCalledWith('slash.exec', expect.anything())
+  })
+
+  it('does not open the overlay for a remote backend (cannot self-update the host)', async () => {
+    setConnection(() => ({ mode: 'remote' }) as HermesConnection)
+    const refreshSessions = vi.fn(async () => undefined)
+    const requestGateway = vi.fn(async () => ({}) as never)
+
+    let handle: HarnessHandle | null = null
+    render(<Harness onReady={h => (handle = h)} refreshSessions={refreshSessions} requestGateway={requestGateway} />)
+
+    await handle!.submitText('/update')
+
+    expect(openUpdatesWindow).not.toHaveBeenCalled()
+    expect(requestGateway).not.toHaveBeenCalledWith('slash.exec', expect.anything())
   })
 })

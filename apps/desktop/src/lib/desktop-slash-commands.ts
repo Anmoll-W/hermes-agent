@@ -42,6 +42,7 @@ const DESKTOP_COMMAND_META = [
   ['/stop', 'Stop running background processes'],
   ['/title', 'Rename the current session'],
   ['/undo', 'Remove the last user/assistant exchange'],
+  ['/update', 'Update Hermes to the latest version'],
   ['/usage', 'Show token usage for this session'],
   ['/yolo', 'Toggle YOLO — auto-approve dangerous commands']
 ] as const
@@ -98,7 +99,6 @@ const TERMINAL_ONLY_COMMANDS = new Set([
   '/statusbar',
   '/toolsets',
   '/tools',
-  '/update',
   '/verbose'
 ])
 

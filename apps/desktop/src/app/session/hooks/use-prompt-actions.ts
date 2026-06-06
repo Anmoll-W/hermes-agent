@@ -33,6 +33,7 @@ import { requestDesktopOnboarding } from '@/store/onboarding'
 import { $activeGatewayProfile, $newChatProfile, ensureGatewayProfile, normalizeProfileKey } from '@/store/profile'
 import {
   $busy,
+  $connection,
   $messages,
   $yoloActive,
   setAwaitingResponse,
@@ -41,6 +42,7 @@ import {
   setSessions,
   setYoloActive
 } from '@/store/session'
+import { openUpdatesWindow } from '@/store/updates'
 
 import type { ClientSessionState, ImageAttachResponse, SessionTitleResponse, SlashExecResponse } from '../../types'
 
@@ -444,6 +446,28 @@ export function usePromptActions({
           return
         }
 
+        // /update opens the desktop's native updater overlay rather than the
+        // CLI's interactive modal (which can't run headless in the slash
+        // worker). The Electron updater patches the LOCAL checkout, so it only
+        // applies when this window drives a local backend — a remote gateway
+        // updates on its own host, which the desktop can't trigger yet.
+        if (normalizedName === 'update') {
+          if ($connection.get()?.mode === 'remote') {
+            notify({
+              kind: 'info',
+              title: 'Update',
+              message:
+                'Updating a remote gateway from the desktop app isn’t supported yet — run `hermes update` on the host machine.'
+            })
+
+            return
+          }
+
+          openUpdatesWindow()
+
+          return
+        }
+
         // /profile selects which profile new chats open in — no app relaunch.
         // A profile is per-session now, so an existing thread can't change its
         // profile mid-stream; `/profile <name>` instead points the next new chat
@@ -531,6 +555,7 @@ export function usePromptActions({
               session_id: sessionId,
               title: arg
             })
+
             const finalTitle = (result?.title || arg).trim()
             const queued = result?.pending === true
 

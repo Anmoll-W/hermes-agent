@@ -25,6 +25,11 @@ describe('desktop slash command curation', () => {
     expect(isDesktopSlashCommand('/my-skill')).toBe(true)
   })
 
+  it('surfaces /update so the desktop native updater is discoverable', () => {
+    expect(isDesktopSlashSuggestion('/update')).toBe(true)
+    expect(isDesktopSlashCommand('/update')).toBe(true)
+  })
+
   it('hides terminal, messaging, and dedicated-UI commands from suggestions', () => {
     expect(isDesktopSlashSuggestion('/clear')).toBe(false)
     expect(isDesktopSlashSuggestion('/compact')).toBe(false)
