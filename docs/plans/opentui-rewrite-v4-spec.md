@@ -577,7 +577,12 @@ two gates run every phase.
   a local Y/N `ConfirmPrompt` for `/clear`,`/new`. Also fixed a keystroke-leak (the answering key
   bleeding into the refocused composer) by deferring the prompt-clear — hardens all Phase 3 prompts.
   Live: `/help` (full catalog), `/version` (slash.exec), `/clear`→confirm→clear, `/quit` (smoke P4).
-- **Next — Phase 4b/4c:** the remaining TUI-only client commands (mouse/redraw/compact/details/
-  sessions/replay/setup/heapdump/mem), the completions dropdown + pager routing for long output, and
-  session RESUME (`session.resume` + hydrate the snapshot incl. resumed tool rows `{name,context}`).
-  Then Phase 5 (overlays/pickers/chrome/agent features).
+- **Phase 4b — session resume: ✅** (this commit). `HERMES_TUI_RESUME=<id|recent>` → `session.most_recent`
+  (recent) → `session.resume` → `commitSnapshot(mapResumeHistory(messages))`, buffering live events
+  across the RPC (`beginBuffer`/`commitSnapshot`). `logic/resume.ts` folds resumed `{role:'tool',
+  name, context}` rows into the preceding assistant turn's parts so they render inline (§8 #5).
+  Live-verified incl. a 103-message stress session: **76ms client hydrate, 214MB RSS stable (no leak)**,
+  tool rows hydrated, scroll works (smoke P4).
+- **Next — Phase 4c:** remaining TUI-only client commands (mouse/redraw/compact/details/sessions/
+  replay/setup/heapdump/mem) + the completions dropdown + pager routing for long output. Then Phase 5
+  (overlays/pickers: model picker, session switcher, skills hub, agents dashboard; chrome; agent features).

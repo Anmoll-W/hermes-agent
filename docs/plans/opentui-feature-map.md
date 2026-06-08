@@ -99,7 +99,7 @@ Composer↔overlay swap on `store.state.prompt`; global Ctrl+C-quit gated on `!b
 | Keystroke-leak fix: defer prompt-clear past the answering key (hardens all prompts) | — | `view/prompts/promptOverlay.tsx` | ✅ | smoke P4 (`/clear`→y→hi) |
 | Remaining TUI-only commands (mouse/redraw/compact/details/sessions/replay/setup/heapdump/mem) | `slash/commands/*.ts` | — | ❌ (4b) | — |
 | Completions dropdown; pager routing for long output | `useCompletion.ts`; `FloatBox` | — | ❌ (4c/5a) | — |
-| Session RESUME (`session.resume` + hydrate incl. tool rows `{name,context}`) | `useSessionLifecycle.ts` | (store.hydrate ready) | ❌ (4b) | — |
+| Session RESUME (`session.resume`/`session.most_recent` + hydrate incl. tool rows `{name,context}` folded into assistant parts) | `useSessionLifecycle.ts` | `logic/resume.ts`, `logic/store.ts` (beginBuffer/commitSnapshot), `entry/main.tsx` | ✅ | `resume.test.ts` + `store.test.ts` · **smoke P4 (live + 103-msg stress: 76ms hydrate, 214MB stable)** |
 
 _Later phases (overlays/pickers, chrome, agent features) are added as each lands — the §1–§4 Ink
 inventory below is the per-phase source._

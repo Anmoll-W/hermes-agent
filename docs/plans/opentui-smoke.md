@@ -268,10 +268,43 @@ renders the live `commands.catalog`. Adds smoke step 5 (slash) partial.
     (composer remount) past the current keystroke (`setTimeout 0`) — this also hardens the Phase 3
     prompts (approve/deny Enter, masked Enter, clarify submit).
 
-**Phase 4b/4c (TODO):** the remaining TUI-only client commands (mouse/redraw/compact/details/
-sessions/replay/setup/heapdump/mem), completions dropdown (step 5), pager routing for long slash
-output (step 5), and session RESUME — `session.resume` + hydrate the snapshot incl. resumed tool
-rows `{role:'tool', name, context}` (step 7).
+**Phase 4b — session resume (step 7):** the entry bootstrap resumes instead of creating when
+`HERMES_TUI_RESUME=<id|recent>` is set: `session.most_recent` (for recent) → `session.resume
+{cols, session_id}` → `store.commitSnapshot(mapResumeHistory(messages))`, buffering live events
+across the RPC (`beginBuffer`/`commitSnapshot`). `mapResumeHistory` (`logic/resume.ts`) folds the
+resumed `{role:'tool', name, context}` rows into the preceding assistant turn's ordered parts so
+they render inline (state:'complete', summary=context) — the §8 #5 gotcha.
+
+- *Run log (2026-06-08, PASS):*
+  - Headless gate `bun run check` → **green** (40 tests / 7 files): `resume.test.ts` (map user/
+    assistant + fold tool rows; standalone holder; ignore junk) + a store test (beginBuffer/
+    commitSnapshot replays events buffered across the resume).
+  - **Live tmux (two launches):** Launch A (initial prompt `… run echo resume-marker-42 …`) created a
+    session with a `⚡terminal` tool call + assistant reply, then quit. Launch B
+    (`HERMES_TUI_RESUME=recent`) → `session resumed {count:3}` and the transcript hydrated:
+    ```
+     ❯ Use your terminal tool to run exactly: echo resume-marker-42 …
+     ⚕
+       ⚡terminal  echo resume-marker-42        ← TOOL ROW hydrated (name + command context)
+     ⚕ The output was resume-marker-42.
+    ```
+    User message ✓, assistant text ✓, **tool row ✓** (the `{name,context}` row rendered inline, not
+    blank). `/quit` clean, child reaped.
+  - **Stress test + profile (real 303-line / 103-message session `20260503_163205_0443f04e` from
+    `~/.hermes/sessions`):** resumed clean. Profile (logged via the `rpc_ms`/`hydrate_ms` instrument):
+    - **client hydration = 76 ms** for 103 messages (`mapResumeHistory` + `commitSnapshot` + the Solid
+      store write — ~0.7ms/msg, fast); server `session.resume` RPC = 1578 ms (the gateway loading the
+      session from disk — server-side, scales with raw message count, outside the TUI's code).
+    - **bun RSS = 214 MB, STABLE over 6s (no leak)**; gateway child (Python) = 157 MB.
+    - Render: the transcript bottom-pinned correctly, multiple `⚡terminal` rows hydrated inline with
+      their command context, no clipping; **PageUp scrolls** into older history.
+    - Note: message rows + their native markdown/code renderables are instantiated for the whole
+      history (the `<scrollbox>` `viewportCulling` skips offscreen *render* calls but not
+      instantiation), so RSS grows ~linearly with turn count — fine at hundreds; list virtualization
+      is the lever if multi-thousand-turn sessions become a target.
+
+**Phase 4c (TODO):** remaining TUI-only client commands (mouse/redraw/compact/details/sessions/
+replay/setup/heapdump/mem), completions dropdown (step 5), pager routing for long slash output.
 
 ### Phase 5a–5e
 _(append: step 5 modals/overlays/pager/completions/pickers; chrome; agent features; subagents)_
