@@ -413,6 +413,10 @@ gateway loads Python from the same checkout with no extra env.
     → `opentui`; `_make_opentui_argv(False)` → `[bun, …/ui-tui-opentui-v2/src/entry/main.tsx]`, cwd
     `ui-tui-opentui-v2`; `--watch` added in dev. So `hermes --tui` now dispatches to the v4 Solid
     engine — the exact `bun …/v2/src/entry/main.tsx` invocation live-smoked in P1–P5e.
+  - **Full-CLI live launch (the definitive cutover smoke):** in tmux,
+    `HERMES_TUI_ENGINE=opentui … python -m hermes_cli.main --tui` (the real `hermes --tui` entry) →
+    the v4 Solid engine painted "Hermes Agent · opentui · ready" + composer in ~2s. Ctrl+C tore the
+    CLI → bun → gateway chain down cleanly — no orphan CLI/bun/gateway (exact-pattern checks).
   - Ink (`ui-tui/`) untouched; the engine gate still defaults to Ink and falls back to Ink on
     Windows/Termux. Distribution realities (Bun + per-arch native lib; runtime-provisioned) per spec
     §10 are unchanged and remain the deploy plan.
