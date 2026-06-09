@@ -118,3 +118,4 @@ ENV PATH="/opt/data/.local/bin:${PATH}"
 RUN mkdir -p /opt/data
 # Railway manages volume mounting via its own volume system (not Docker VOLUME)
 ENTRYPOINT [ "/usr/bin/tini", "-g", "--", "/opt/hermes/docker/entrypoint.sh" ]
+CMD ["gateway", "run", "--replace", "--accept-hooks"]
