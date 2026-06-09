@@ -36,32 +36,54 @@ export default tseslint.config(
       "@typescript-eslint/no-misused-promises": "error",
       "@typescript-eslint/await-thenable": "error",
 
-      // --- Phase 2: promote to error after Schema decode replaces the casts ---
-      // The cast/`unknown` family fires on the `as`/`unknown` boundary code that
-      // Phase 2 will replace with Schema decoding. Deferred to 'warn' so the gate
-      // stays green (eslint exits 0 on warnings) without masking the real signal.
-      "@typescript-eslint/no-unsafe-assignment": "warn",
-      "@typescript-eslint/no-unsafe-member-access": "warn",
-      "@typescript-eslint/no-unsafe-argument": "warn",
-      "@typescript-eslint/no-unsafe-return": "warn",
-      "@typescript-eslint/no-unsafe-call": "warn",
+      // --- Type-safety: ENFORCED as errors in our boundary/logic .ts code ---
+      // Production .ts is clean of the no-unsafe-* family (the loose-typed gateway
+      // payloads are Schema-decoded). The only sources are (a) *.tsx — @opentui/solid's
+      // JSX namespace types every component `return (<…>)` as `error`/unknown, a
+      // framework limitation disabled for views below — and (b) the test harness
+      // (loose render/effect fixtures + async mocks), exempt below. So we enforce ERROR.
+      "@typescript-eslint/no-unsafe-assignment": "error",
+      "@typescript-eslint/no-unsafe-member-access": "error",
+      "@typescript-eslint/no-unsafe-argument": "error",
+      "@typescript-eslint/no-unsafe-return": "error",
+      "@typescript-eslint/no-unsafe-call": "error",
+      "@typescript-eslint/no-base-to-string": "error",
+      "@typescript-eslint/restrict-template-expressions": "error",
+      "@typescript-eslint/no-unnecessary-type-assertion": "error",
+      "@typescript-eslint/require-await": "error",
+      // Defensive guards on untrusted runtime/gateway data: TS's narrowing doesn't
+      // model the wire, so "condition is always truthy" here is intentional armor,
+      // not dead code. Kept as a hint (warn), not a gate failure.
       "@typescript-eslint/no-unnecessary-condition": "warn",
-      "@typescript-eslint/no-base-to-string": "warn",
-      "@typescript-eslint/restrict-template-expressions": "warn",
-      // `no-unnecessary-type-assertion` is the cast family (the one site is a
-      // `effect as Effect.Effect<…>` test cast); `require-await` fires only on
-      // async test-mock fns satisfying an async signature. Both are recommended
-      // -TypeChecked errors by default — demote to 'warn' to keep the gate green
-      // until Phase 2 (Schema decode) removes the casts.
-      "@typescript-eslint/no-unnecessary-type-assertion": "warn",
-      "@typescript-eslint/require-await": "warn",
     },
   },
   {
-    // Tests keep their `!` non-null assertions (fixtures with known-present data).
-    files: ["**/*.test.ts", "**/*.test.tsx"],
+    // @opentui/solid's custom JSX namespace types component returns as `error`/
+    // unknown, so EVERY `return (<…>)` in a view trips the no-unsafe-* family.
+    // That's a framework typing limitation, not unsafe app code — off for views.
+    files: ["**/*.tsx"],
+    rules: {
+      "@typescript-eslint/no-unsafe-return": "off",
+      "@typescript-eslint/no-unsafe-assignment": "off",
+      "@typescript-eslint/no-unsafe-member-access": "off",
+      "@typescript-eslint/no-unsafe-argument": "off",
+      "@typescript-eslint/no-unsafe-call": "off",
+    },
+  },
+  {
+    // Test helpers/fixtures: keep `!` on known-present data, and allow the loose
+    // render/effect harness casts + async mock signatures (they satisfy real
+    // Promise-returning interfaces with no body to await).
+    files: ["**/*.test.ts", "**/*.test.tsx", "src/test/lib/**"],
     rules: {
       "@typescript-eslint/no-non-null-assertion": "off",
+      "@typescript-eslint/no-unsafe-assignment": "off",
+      "@typescript-eslint/no-unsafe-member-access": "off",
+      "@typescript-eslint/no-unsafe-argument": "off",
+      "@typescript-eslint/no-unsafe-return": "off",
+      "@typescript-eslint/no-unsafe-call": "off",
+      "@typescript-eslint/no-unnecessary-type-assertion": "off",
+      "@typescript-eslint/require-await": "off",
     },
   },
   {
