@@ -2931,7 +2931,13 @@ def _coerce_message_text(content: Any) -> str:
     return str(content)
 
 
-def _history_to_messages(history: list[dict]) -> list[dict]:
+def _history_to_messages(history: list[dict], include_tool_output: bool = False) -> list[dict]:
+    # ``include_tool_output`` (opt-in; only the native/opentui engine passes it via
+    # session.resume) folds each tool's redacted+capped result + args into its row so
+    # a resumed transcript renders collapsible tool blocks identical to a live turn.
+    # OFF by default so the Ink path is byte-for-byte unchanged (its render tree showed
+    # the verbose trail expanded and OOM'd on big output — #34095; the native engine
+    # renders tools collapsed, so shipping the same capped tail is safe there).
     messages = []
     tool_call_args = {}
 
@@ -2959,9 +2965,13 @@ def _history_to_messages(history: list[dict]) -> list[dict]:
             tc_info = tool_call_args.get(tc_id) if tc_id else None
             name = (tc_info[0] if tc_info else None) or m.get("tool_name") or "tool"
             args = (tc_info[1] if tc_info else None) or {}
-            messages.append(
-                {"role": "tool", "name": name, "context": _tool_ctx(name, args)}
-            )
+            tool_msg = {"role": "tool", "name": name, "context": _tool_ctx(name, args)}
+            if include_tool_output:
+                if args:
+                    tool_msg["args"] = args
+                if content_text.strip():
+                    tool_msg["result_text"] = _redact_tui_verbose_text(content_text)
+            messages.append(tool_msg)
             continue
         if not content_text.strip():
             continue
@@ -3338,7 +3348,9 @@ def _(rid, params: dict) -> dict:
         display_history_prefix = display_history[
             : max(0, len(display_history) - len(history))
         ]
-        messages = _history_to_messages(display_history)
+        messages = _history_to_messages(
+            display_history, include_tool_output=bool(params.get("with_tool_output"))
+        )
         tokens = _set_session_context(target)
         try:
             # Pass the profile's db so the agent persists turns to the right

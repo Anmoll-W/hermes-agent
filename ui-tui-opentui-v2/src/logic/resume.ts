@@ -9,7 +9,8 @@
  * a live one. Resumed assistant text is given a single text part so it renders
  * through the native markdown path. IDs are `r*` (distinct from live `p*`).
  */
-import type { Message, Part, SessionItem } from './store.ts'
+import type { Message, Part, SessionItem, ToolPartState } from './store.ts'
+import { stripOmittedNote, stripToolEnvelope } from './toolOutput.ts'
 
 function readStr(value: unknown, key: string): string | undefined {
   if (!value || typeof value !== 'object') return undefined
@@ -55,8 +56,28 @@ export function mapResumeHistory(history: unknown): Message[] {
     if (role === 'tool') {
       const name = readStr(raw, 'name') ?? 'tool'
       const context = readStr(raw, 'context')
-      const tool: Part = { type: 'tool', id: id(), name, state: 'complete' }
-      if (context) tool.summary = context
+      const tool: ToolPartState = { type: 'tool', id: id(), name, state: 'complete' }
+      // Match the live tool part exactly (item 1): primary-arg preview in the
+      // header, plus the (capped) output so resumed tools are collapsible too.
+      if (context) tool.argsPreview = context
+      const rawResult = readStr(raw, 'result_text')
+      if (rawResult) {
+        const { body, omittedNote } = stripOmittedNote(rawResult)
+        const resultText = stripToolEnvelope(body)
+        if (resultText) {
+          tool.resultText = resultText
+          tool.lineCount = resultText.replace(/\s+$/, '').split('\n').length
+        }
+        if (omittedNote) tool.omittedNote = omittedNote
+      }
+      const args = (raw as { args?: unknown }).args
+      if (args && typeof args === 'object') {
+        try {
+          tool.argsText = JSON.stringify(args, null, 2)
+        } catch {
+          /* unstringifiable — leave unset */
+        }
+      }
       if (!currentAssistant) {
         currentAssistant = { role: 'assistant', text: '', parts: [] }
         out.push(currentAssistant)

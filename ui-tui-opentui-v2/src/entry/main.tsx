@@ -66,7 +66,10 @@ const resumeInto = (gateway: GatewayServiceShape, store: SessionStore, sid: stri
     const t0 = Date.now()
     const resumed = yield* gateway.request<{ messages?: unknown; info?: Record<string, unknown> }>('session.resume', {
       cols,
-      session_id: sid
+      session_id: sid,
+      // native engine renders tools collapsed → safe to fold each tool's capped
+      // result into the resume snapshot so resumed turns render like live (item 1).
+      with_tool_output: true
     })
     const t1 = Date.now()
     const snapshot = mapResumeHistory(resumed?.messages)

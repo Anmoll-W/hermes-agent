@@ -22,7 +22,8 @@ describe('mapResumeHistory (Phase 4b)', () => {
     expect(a1.parts?.map(p => p.type)).toEqual(['text', 'tool']) // text + folded tool, inline
     const tool = a1.parts![1]!
     if (tool.type === 'tool') {
-      expect(tool).toMatchObject({ name: 'terminal', state: 'complete', summary: 'ls -la' })
+      // context → argsPreview (same field as a live tool part, so it renders identically)
+      expect(tool).toMatchObject({ name: 'terminal', state: 'complete', argsPreview: 'ls -la' })
     } else {
       throw new Error('expected a folded tool part')
     }
@@ -33,7 +34,27 @@ describe('mapResumeHistory (Phase 4b)', () => {
     const msgs = mapResumeHistory([{ role: 'tool', name: 'read_file', context: 'foo.ts' }])
     expect(msgs).toHaveLength(1)
     expect(msgs[0]!.role).toBe('assistant')
-    expect(msgs[0]!.parts?.[0]).toMatchObject({ type: 'tool', name: 'read_file', summary: 'foo.ts' })
+    expect(msgs[0]!.parts?.[0]).toMatchObject({ type: 'tool', name: 'read_file', argsPreview: 'foo.ts' })
+  })
+
+  test('folds result_text + args so resumed tools render collapsible like live (item 1)', () => {
+    const msgs = mapResumeHistory([
+      { role: 'assistant', text: 'Running.' },
+      {
+        role: 'tool',
+        name: 'terminal',
+        context: 'ls /usr/bin',
+        args: { command: 'ls /usr/bin' },
+        result_text: '[showing verbose tail; omitted 90 chars]\n{"output":"a\\nb\\nc","exit_code":0}'
+      }
+    ])
+    const tool = msgs[0]!.parts![1]!
+    if (tool.type !== 'tool') throw new Error('expected a folded tool part')
+    expect(tool.argsPreview).toBe('ls /usr/bin')
+    expect(tool.resultText).toBe('a\nb\nc') // label peeled + envelope stripped → collapsible
+    expect(tool.lineCount).toBe(3)
+    expect(tool.omittedNote).toBe('90 chars')
+    expect(tool.argsText).toContain('"command"')
   })
 
   test('ignores non-arrays and unknown roles', () => {
