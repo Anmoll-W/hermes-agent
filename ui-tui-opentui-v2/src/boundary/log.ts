@@ -20,9 +20,45 @@ import { appendFileSync, mkdirSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 
-export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
+import { Schema } from 'effect'
+
+// LogLevel is modeled schema-first (the schema-inferred-types idiom, mirroring
+// `boundary/schema/GatewayEvent.ts`): declare the literal union once and INFER
+// the TS type from it, so the two can never drift.
+export const LogLevelSchema = Schema.Literals(['debug', 'info', 'warn', 'error'])
+export type LogLevel = typeof LogLevelSchema.Type
 
 const PRIORITY: Record<LogLevel, number> = { debug: 0, info: 1, warn: 2, error: 3 }
+
+/**
+ * Serialize a value to JSON that NEVER throws. A caller-supplied `data` can hold
+ * a circular reference or a BigInt — plain `JSON.stringify` throws on both, which
+ * (in the file-write `catch` below) would flip `fileBroken` and kill ALL file
+ * logging for the session. Instead we degrade a bad payload to a placeholder:
+ *   - circular refs (tracked via a per-call `WeakSet` of seen objects) → '[Circular]'
+ *   - BigInt → `\`${n}n\`` (JSON has no bigint; keep it readable + reversible-ish)
+ * and wrap the whole thing so any other throw (e.g. a hostile `toJSON`) falls back
+ * to `String(value)`, then to '[unserializable]' if even that throws.
+ */
+export function safeStringify(value: unknown): string {
+  try {
+    const seen = new WeakSet<object>()
+    return JSON.stringify(value, (_key, val: unknown) => {
+      if (typeof val === 'bigint') return `${val}n`
+      if (typeof val === 'object' && val !== null) {
+        if (seen.has(val)) return '[Circular]'
+        seen.add(val)
+      }
+      return val
+    })
+  } catch {
+    try {
+      return String(value)
+    } catch {
+      return '[unserializable]'
+    }
+  }
+}
 
 export interface LogEntry {
   readonly t: number // epoch ms
@@ -82,7 +118,7 @@ export class Log {
 
     if (this.file && !this.fileBroken) {
       try {
-        appendFileSync(this.file, JSON.stringify(entry) + '\n')
+        appendFileSync(this.file, safeStringify(entry) + '\n')
       } catch {
         this.fileBroken = true // stop hammering a broken path; the ring keeps working
       }
