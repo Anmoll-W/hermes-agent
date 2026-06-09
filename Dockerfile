@@ -116,5 +116,5 @@ ENV HERMES_WEB_DIST=/opt/hermes/hermes_cli/web_dist
 ENV HERMES_HOME=/opt/data
 ENV PATH="/opt/data/.local/bin:${PATH}"
 RUN mkdir -p /opt/data
-VOLUME [ "/opt/data" ]
+# Railway manages volume mounting via its own volume system (not Docker VOLUME)
 ENTRYPOINT [ "/usr/bin/tini", "-g", "--", "/opt/hermes/docker/entrypoint.sh" ]
