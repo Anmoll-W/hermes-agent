@@ -1630,6 +1630,18 @@ def _make_opentui_argv(tui_dev: bool) -> tuple[list[str], Path]:
     for app_dir, rel in candidates:
         entry = app_dir / rel
         if entry.is_file():
+            # Preflight: Bun runs the TS entry directly (no build step), so the
+            # package's node_modules must already be installed or the first
+            # `import '@opentui/...'` dies with a cryptic resolve error and a blank
+            # UI. Fail loudly with the fix instead.
+            if not (app_dir / "node_modules" / "@opentui").is_dir():
+                print(
+                    f"OpenTUI engine dependencies are not installed in {app_dir}.\n"
+                    f"Run:  (cd {app_dir} && bun install)\n"
+                    f"Or unset HERMES_TUI_ENGINE to use the default Ink engine.",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
             bun = _bun_bin()
             args = [bun]
             if tui_dev:
