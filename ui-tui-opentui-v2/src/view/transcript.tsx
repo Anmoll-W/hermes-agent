@@ -30,7 +30,7 @@ export function Transcript(props: { store: SessionStore }) {
         <ScrollAnchorProvider scroll={scroll}>
           {/* empty-transcript home screen (item 12); replaced by messages on the first turn */}
           <Show when={props.store.state.messages.length === 0}>
-            <HomeHint catalog={props.store.state.catalog} />
+            <HomeHint store={props.store} />
           </Show>
           <For each={props.store.state.messages}>{message => <MessageLine message={message} />}</For>
         </ScrollAnchorProvider>

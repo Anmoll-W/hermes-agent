@@ -140,9 +140,12 @@ export interface SessionInfo {
   compressions?: number
 }
 
-/** Startup catalog (tools/skills/MCP) for the home-screen panel (item 9). */
+/** Startup catalog (tools/skills/MCP) for the home-screen panel (item 9 / banner parity). */
 export interface Catalog {
-  readonly tools: { readonly total: number; readonly toolsets: ReadonlyArray<{ name: string; count: number }> }
+  readonly tools: {
+    readonly total: number
+    readonly toolsets: ReadonlyArray<{ name: string; count: number; enabled: boolean; tools: ReadonlyArray<string> }>
+  }
   readonly skills: { readonly total: number; readonly categories: ReadonlyArray<{ name: string; count: number }> }
   readonly mcp: { readonly servers: ReadonlyArray<string> }
 }
@@ -178,6 +181,8 @@ export interface StoreState {
   hint: string | undefined
   /** Startup tools/skills/MCP catalog (from `startup.catalog`) for the home panel (item 9). */
   catalog: Catalog | undefined
+  /** The current session id (shown in the home panel; updated on create/resume). */
+  sessionId: string | undefined
 }
 
 const LRU_LIMIT = 1000
@@ -264,7 +269,8 @@ export function createSessionStore() {
     status: undefined,
     info: {},
     hint: undefined,
-    catalog: undefined
+    catalog: undefined,
+    sessionId: undefined
   })
 
   // Monotonic part id (stable `key` per part so a new tool part below a streaming
@@ -669,18 +675,27 @@ export function createSessionStore() {
       v && typeof v === 'object' ? (v as { readonly [k: string]: unknown }) : {}
     const num = (v: unknown): number => (typeof v === 'number' ? v : 0)
     const list = (v: unknown): unknown[] => (Array.isArray(v) ? v : [])
+    const strs = (v: unknown): string[] => list(v).filter((s): s is string => typeof s === 'string')
     const pair = (v: unknown) => {
       const o = obj(v)
       return { count: num(o.count), name: readStr(o, 'name') ?? '' }
+    }
+    const toolset = (v: unknown) => {
+      const o = obj(v)
+      return { count: num(o.count), enabled: o.enabled !== false, name: readStr(o, 'name') ?? '', tools: strs(o.tools) }
     }
     const tools = obj(root.tools)
     const skills = obj(root.skills)
     const mcp = obj(root.mcp)
     setState('catalog', {
-      mcp: { servers: list(mcp.servers).filter((s): s is string => typeof s === 'string') },
+      mcp: { servers: strs(mcp.servers) },
       skills: { categories: list(skills.categories).map(pair).filter(p => p.name), total: num(skills.total) },
-      tools: { toolsets: list(tools.toolsets).map(pair).filter(p => p.name), total: num(tools.total) }
+      tools: { toolsets: list(tools.toolsets).map(toolset).filter(p => p.name), total: num(tools.total) }
     })
+  }
+
+  function setSessionId(sid: string | undefined): void {
+    setState('sessionId', sid)
   }
 
   return {
@@ -689,6 +704,7 @@ export function createSessionStore() {
     pushUser,
     pushSystem,
     setCatalog,
+    setSessionId,
     clearTranscript,
     setConfirm,
     openPager,

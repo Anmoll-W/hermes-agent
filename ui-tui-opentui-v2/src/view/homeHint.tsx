@@ -1,24 +1,16 @@
 /**
- * HomeHint — the empty-transcript home screen (items 12 + 9). Shows the full
- * HERMES-AGENT banner (the canonical CLI logo, width-guarded → compact brand on
- * narrow terminals), the welcome line, a COLLAPSIBLE tools/skills/MCP catalog
- * panel (item 9), the common commands, and the key tips. Fully themed; decorative,
- * so `selectable={false}` (item 4).
+ * HomeHint — the empty-transcript home screen (items 12 + 9; Ink `branding.tsx`
+ * parity). The HERMES-AGENT banner + a tagline, then a session info block
+ * (model · Nous Research / dir / Session id), then SEPARATE collapsible sections —
+ * Available Tools (enabled toolsets + their tools), Available Skills, MCP Servers —
+ * and a summary line. Fully themed; decorative, so `selectable={false}` (item 4).
  */
+import { createSignal, For, type JSX, Show } from 'solid-js'
+
+import type { SessionStore } from '../logic/store.ts'
+import { truncate } from '../logic/toolOutput.ts'
 import { useDimensions } from './dimensions.tsx'
-import { createSignal, For, Show } from 'solid-js'
-
-import type { Catalog } from '../logic/store.ts'
 import { useTheme } from './theme.tsx'
-
-const COMMANDS: ReadonlyArray<readonly [string, string]> = [
-  ['/help', 'list all commands'],
-  ['/model', 'switch model'],
-  ['/sessions', 'resume a session'],
-  ['/skills', 'browse skills'],
-  ['/agents', 'live delegation trace'],
-  ['/clear', 'clear the transcript']
-]
 
 // The canonical HERMES-AGENT block logo (hermes_cli/banner.py), gold→amber→bronze.
 const BANNER: ReadonlyArray<readonly [string, 'primary' | 'accent' | 'border']> = [
@@ -30,13 +22,47 @@ const BANNER: ReadonlyArray<readonly [string, 'primary' | 'accent' | 'border']> 
   ['╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝╚══════╝╚══════╝      ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝  ╚═══╝   ╚═╝', 'border']
 ]
 const BANNER_W = 102
+const TOOLSETS_MAX = 10
 
-export function HomeHint(props: { catalog: Catalog | undefined }) {
+/** `anthropic/claude-opus-4-8` → `claude-opus-4-8`. */
+const shortModel = (m: string) => (m.includes('/') ? (m.split('/').at(-1) ?? m) : m)
+const HOME = process.env.HOME ?? ''
+const shortCwd = (cwd: string) => (HOME && cwd.startsWith(HOME) ? '~' + cwd.slice(HOME.length) : cwd)
+
+export function HomeHint(props: { store: SessionStore }) {
   const theme = useTheme()
   const dims = useDimensions()
-  const [open, setOpen] = createSignal(false)
   const wide = () => dims().width >= BANNER_W
-  const cat = () => props.catalog
+  const cat = () => props.store.state.catalog
+  const info = () => props.store.state.info
+  const enabledToolsets = () => (cat()?.tools.toolsets ?? []).filter(t => t.enabled)
+
+  // A collapsible section: ▸/▾ accent chevron + label title + optional muted suffix.
+  function Section(p: { title: string; suffix?: string; open?: boolean; children: JSX.Element }) {
+    const [open, setOpen] = createSignal(p.open ?? false)
+    return (
+      <box style={{ flexDirection: 'column', marginTop: 1 }}>
+        <box style={{ flexDirection: 'row', flexShrink: 0 }} onMouseDown={() => setOpen(o => !o)}>
+          <text selectable={false}>
+            <span style={{ fg: theme().color.accent }}>{open() ? '▾ ' : '▸ '}</span>
+            <span style={{ fg: theme().color.label }}>{p.title}</span>
+            <Show when={p.suffix}>
+              <span style={{ fg: theme().color.muted }}>{` ${p.suffix}`}</span>
+            </Show>
+          </text>
+        </box>
+        <Show when={open()}>
+          <box
+            style={{ flexDirection: 'column', marginLeft: 2, paddingLeft: 1 }}
+            border={['left']}
+            borderColor={theme().color.border}
+          >
+            {p.children}
+          </box>
+        </Show>
+      </box>
+    )
+  }
 
   return (
     <box style={{ flexDirection: 'column', flexShrink: 0, paddingLeft: 1, marginTop: 1 }}>
@@ -60,69 +86,83 @@ export function HomeHint(props: { catalog: Catalog | undefined }) {
           )}
         </For>
       </Show>
+      <text selectable={false}>
+        <span style={{ fg: theme().color.accent }}>{`${theme().brand.icon} `}</span>
+        <span style={{ fg: theme().color.muted }}>Nous Research · Messenger of the Digital Gods</span>
+      </text>
 
-      <box style={{ marginTop: 1 }}>
-        <text selectable={false}>
-          <span style={{ fg: theme().color.muted }}>{theme().brand.welcome}</span>
-        </text>
+      {/* session info block: model · Nous Research / dir / Session id */}
+      <box style={{ flexDirection: 'column', marginTop: 1 }}>
+        <Show when={info().model}>
+          <text selectable={false}>
+            <span style={{ fg: theme().color.accent }}>{shortModel(info().model!)}</span>
+            <span style={{ fg: theme().color.muted }}> · Nous Research</span>
+          </text>
+        </Show>
+        <Show when={info().cwd}>
+          <text selectable={false}>
+            <span style={{ fg: theme().color.muted }}>{shortCwd(info().cwd!)}</span>
+            <Show when={info().branch}>
+              <span style={{ fg: theme().color.muted }}>{` (${info().branch})`}</span>
+            </Show>
+          </text>
+        </Show>
+        <Show when={props.store.state.sessionId}>
+          <text selectable={false}>
+            <span style={{ fg: theme().color.muted }}>Session: </span>
+            <span style={{ fg: theme().color.border }}>{props.store.state.sessionId}</span>
+          </text>
+        </Show>
       </box>
 
-      {/* collapsible tools / skills / MCP catalog (item 9) */}
+      {/* SEPARATE collapsible sections (Ink parity) + summary */}
       <Show when={cat()}>
         {c => (
-          <box style={{ flexDirection: 'column', marginTop: 1 }}>
-            <box style={{ flexDirection: 'row', flexShrink: 0 }} onMouseDown={() => setOpen(o => !o)}>
-              <text selectable={false}>
-                <span style={{ fg: theme().color.muted }}>{open() ? '▼ ' : '▶ '}</span>
-                <span style={{ fg: theme().color.label }}>{`${c().tools.total} tools`}</span>
-                <span style={{ fg: theme().color.muted }}>{' · '}</span>
-                <span style={{ fg: theme().color.label }}>{`${c().skills.total} skills`}</span>
-                <span style={{ fg: theme().color.muted }}>{' · '}</span>
-                <span style={{ fg: theme().color.label }}>{`${c().mcp.servers.length} MCP`}</span>
-              </text>
-            </box>
-            <Show when={open()}>
-              <box
-                style={{ flexDirection: 'column', marginLeft: 2, paddingLeft: 1 }}
-                border={['left']}
-                borderColor={theme().color.border}
-              >
-                <text selectable={false}>
-                  <span style={{ fg: theme().color.label }}>toolsets  </span>
-                  <span style={{ fg: theme().color.muted }}>
-                    {c().tools.toolsets.map(t => `${t.name}(${t.count})`).join('  ')}
-                  </span>
-                </text>
-                <Show when={c().skills.categories.length > 0}>
+          <box style={{ flexDirection: 'column' }}>
+            <Section title="Available Tools" open>
+              <For each={enabledToolsets().slice(0, TOOLSETS_MAX)}>
+                {ts => (
                   <text selectable={false}>
-                    <span style={{ fg: theme().color.label }}>skills    </span>
+                    <span style={{ fg: theme().color.label }}>{`${ts.name}: `}</span>
                     <span style={{ fg: theme().color.muted }}>
-                      {c().skills.categories.map(s => `${s.name}(${s.count})`).join('  ')}
+                      {truncate(ts.tools.join(', ') || `${ts.count} tools`, Math.max(20, dims().width - ts.name.length - 8))}
                     </span>
                   </text>
-                </Show>
-                <Show when={c().mcp.servers.length > 0}>
-                  <text selectable={false}>
-                    <span style={{ fg: theme().color.label }}>mcp       </span>
-                    <span style={{ fg: theme().color.muted }}>{c().mcp.servers.join('  ')}</span>
-                  </text>
-                </Show>
-              </box>
-            </Show>
+                )}
+              </For>
+              <Show when={enabledToolsets().length > TOOLSETS_MAX}>
+                <text selectable={false}>
+                  <span style={{ fg: theme().color.muted }}>{`(and ${enabledToolsets().length - TOOLSETS_MAX} more toolsets…)`}</span>
+                </text>
+              </Show>
+            </Section>
+
+            <Section title={`Available Skills (${c().skills.total})`} suffix={`in ${c().skills.categories.length} categories`}>
+              <text selectable={false}>
+                <span style={{ fg: theme().color.muted }}>
+                  {c().skills.categories.map(s => `${s.name} (${s.count})`).join('  ')}
+                </span>
+              </text>
+            </Section>
+
+            <Section title={`MCP Servers (${c().mcp.servers.length})`} suffix={c().mcp.servers.length ? 'connected' : ''}>
+              <text selectable={false}>
+                <span style={{ fg: theme().color.muted }}>{c().mcp.servers.join('  ') || 'none configured'}</span>
+              </text>
+            </Section>
+
+            <box style={{ marginTop: 1 }}>
+              <text selectable={false}>
+                <span style={{ fg: theme().color.text }}>{`${c().tools.total} tools`}</span>
+                <span style={{ fg: theme().color.muted }}>{` · ${c().skills.total} skills · ${c().mcp.servers.length} MCP · `}</span>
+                <span style={{ fg: theme().color.accent }}>/help</span>
+                <span style={{ fg: theme().color.muted }}> for commands</span>
+              </text>
+            </box>
           </box>
         )}
       </Show>
 
-      <box style={{ flexDirection: 'column', marginTop: 1 }}>
-        <For each={COMMANDS}>
-          {([cmd, desc]) => (
-            <text selectable={false}>
-              <span style={{ fg: theme().color.accent }}>{cmd.padEnd(12)}</span>
-              <span style={{ fg: theme().color.muted }}>{desc}</span>
-            </text>
-          )}
-        </For>
-      </box>
       <box style={{ marginTop: 1 }}>
         <text selectable={false}>
           <span style={{ fg: theme().color.muted }}>

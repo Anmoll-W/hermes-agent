@@ -82,6 +82,7 @@ const writeActiveSession = (sid: string | undefined) => {
 const resumeInto = (gateway: GatewayServiceShape, store: SessionStore, sid: string, cols: number) =>
   Effect.gen(function* () {
     writeActiveSession(sid) // the session we're switching to is now the active one (#5)
+    store.setSessionId(sid)
     store.beginBuffer()
     const t0 = Date.now()
     const resumed = yield* gateway.request<{ messages?: unknown; info?: Record<string, unknown> }>('session.resume', {
@@ -148,6 +149,7 @@ const bootstrapSession = (gateway: GatewayServiceShape, store: SessionStore, inp
       }
       if (created?.info) store.applyInfo(created.info)
       writeActiveSession(sid) // record the new session for the launcher's exit epilogue (#5)
+      store.setSessionId(sid)
       log.info('bootstrap', 'session created', { sid })
     }
 

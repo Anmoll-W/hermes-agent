@@ -8528,12 +8528,25 @@ def _(rid, params: dict) -> dict:
     try:
         from toolsets import get_all_toolsets, get_toolset_info
 
+        # enabled toolsets for THIS session (or the config default), mirroring tools.list
+        session = _sessions.get(params.get("session_id", ""))
+        enabled = (
+            set(getattr(session["agent"], "enabled_toolsets", []) or [])
+            if session
+            else set(_load_enabled_toolsets() or [])
+        )
         for name in sorted(get_all_toolsets().keys()):
             info = get_toolset_info(name)
             if not info:
                 continue
-            tools["toolsets"].append({"name": name, "count": int(info["tool_count"])})
-            tools["total"] += int(info["tool_count"])
+            is_on = name in enabled if enabled else True
+            # the startup panel lists ENABLED toolsets with their tools (Ink parity)
+            tool_names = [str(t) for t in (info.get("resolved_tools") or [])]
+            tools["toolsets"].append(
+                {"name": name, "count": int(info["tool_count"]), "enabled": is_on, "tools": tool_names}
+            )
+            if is_on:
+                tools["total"] += int(info["tool_count"])
     except Exception:
         pass
 

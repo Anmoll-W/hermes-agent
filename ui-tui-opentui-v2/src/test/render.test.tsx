@@ -241,16 +241,15 @@ describe('App render (Phase 1, themed)', () => {
           <App store={store} />
         </ThemeProvider>
       ),
-      { until: '/help', width: 72, height: 20 }
+      { until: 'Nous Research', width: 72, height: 20 }
     )
 
     // (theme-independent assertions — testRender reuses a global root, so a prior
     // test's skin/brand can bleed; the real app has one store. The home hint's
     // content is what matters here.)
-    expect(frame).toContain('/help') // common command
-    expect(frame).toContain('/agents')
-    expect(frame).toContain('resume a session')
+    expect(frame).toContain('Nous Research') // the tagline
     expect(frame).toContain('to mention') // the input tips line
+    expect(frame).toContain('Ctrl+C to stop/quit')
   })
 
   test('the home screen shows a collapsible tools/skills/MCP catalog panel (item 9)', async () => {

@@ -137,14 +137,24 @@ describe('session store — ordered parts (Phase 2b)', () => {
   test('setCatalog maps the loose startup.catalog response defensively (item 9)', () => {
     const store = createSessionStore()
     store.setCatalog({
-      tools: { total: 42, toolsets: [{ name: 'core', count: 12 }, { name: '', count: 1 }] },
+      tools: {
+        total: 42,
+        toolsets: [
+          { name: 'core', count: 12, enabled: true, tools: ['a', 'b', 3] },
+          { name: 'off', count: 5, enabled: false, tools: [] },
+          { name: '', count: 1 }
+        ]
+      },
       skills: { total: 7, categories: [{ name: 'dev', count: 7 }] },
       mcp: { servers: ['railway', 123, 'beeper'] },
       junk: 'ignored'
     })
     const c = store.state.catalog!
     expect(c.tools.total).toBe(42)
-    expect(c.tools.toolsets).toEqual([{ name: 'core', count: 12 }]) // nameless entry dropped
+    expect(c.tools.toolsets).toEqual([
+      { name: 'core', count: 12, enabled: true, tools: ['a', 'b'] }, // non-string tool dropped
+      { name: 'off', count: 5, enabled: false, tools: [] } // enabled flag preserved
+    ]) // nameless entry dropped
     expect(c.skills.total).toBe(7)
     expect(c.mcp.servers).toEqual(['railway', 'beeper']) // non-string dropped
   })
