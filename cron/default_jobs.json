@@ -1,0 +1,16 @@
+{
+  "jobs": [
+    {
+      "name": "content-draft",
+      "schedule": "0 14 * * *",
+      "deliver": "local",
+      "prompt": "You are the Hermes content draft curator running on the Railway gateway. Vault root: /opt/data/vault.\n\nTASK: Stock the LinkedIn draft bench with 1-3 new raw drafts from undrafted vault material.\n\n## Step 1 — Audit existing drafts\nList and briefly read files in /opt/data/vault/Projects/LinkedIn/Posts/Drafts/ to know what is already drafted (check frontmatter 'slug' or filename to avoid duplicates).\n\n## Step 2 — Find fresh source material\nScan these vault paths for undrafted content (anything not already appearing in Drafts/):\n- /opt/data/vault/Projects/LinkedIn/ for session logs, ideas files\n- /opt/data/vault/Knowledge/inbox/ for recent captured thoughts\n- /opt/data/vault/01 Daily Notes/ (last 7 days) for notable work logged under ## Work\n\n## Step 3 — Draft 1-3 posts\nFor each promising piece of undrafted content, write a new file at:\n/opt/data/vault/Projects/LinkedIn/Posts/Drafts/YYYY-MM-DD-[slug].md\n\nFrontmatter format:\n---\nstatus: raw\ndate: [today YYYY-MM-DD]\ntopic: [one-line topic]\nsurface: personal\n---\n\nBody: 3-8 lines, PM judgment-first (specific insight, no shorthands, no 'Myth/Reality' openers).\n\nIf no good undrafted material exists: write 0 drafts rather than padding with weak content.\n\n## Step 4 — Health log\nAppend one line to /opt/data/vault/Knowledge/automation-health.md:\n- content-draft SUCCESS [today YYYY-MM-DD] — [N] draft(s) created\n\n## Step 5 — HC ping\nRun via Bash: curl -fsS -m 10 \"$HC_CONTENT_PING_URL\" || echo 'HC ping failed (non-fatal)'\n\nOutput a brief summary: N drafts created and their topics (or '0 drafts — no undrafted material found')."
+    },
+    {
+      "name": "reminder-resurface-eve",
+      "schedule": "30 12 * * *",
+      "deliver": "local",
+      "prompt": "You are the Hermes evening reminder resurfacer running on the Railway gateway. Vault root: /opt/data/vault.\n\nTASK: Resurface relevant reminders and time-sensitive items for the evening.\n\n## Step 1 — Read active reminders\nLook for reminder files in:\n- /opt/data/vault/Knowledge/reminders-active.md (if it exists)\n- Any file matching /opt/data/vault/Knowledge/reminders*.md\n- /opt/data/vault/01 Daily Notes/[today YYYY-MM-DD].md — items tagged #reminder or #nudge\n- /opt/data/vault/Knowledge/inbox/ for unprocessed reminder captures\n\nIf no reminder files exist, proceed to Step 3 with 0 items.\n\n## Step 2 — Filter relevant items\nSelect reminders that are:\n- Due today or overdue\n- Time-sensitive within the next 3 days\n- Evening-appropriate nudges (wind-down, prep for tomorrow)\n\n## Step 3 — Write resurface output\nAppend to /opt/data/vault/Knowledge/hermes-status.md under a new section:\n\n## Evening Resurface [today YYYY-MM-DD]\n[List of resurfaced items, or 'No active reminders due']\n\nKeep each entry to one line: [item description] — due [date] / [context]\n\n## Step 4 — Health log\nAppend one line to /opt/data/vault/Knowledge/automation-health.md:\n- reminder-resurface-eve SUCCESS [today YYYY-MM-DD] — [N] item(s) resurfaced\n\n## Step 5 — HC ping\nRun via Bash: curl -fsS -m 10 \"$HC_REMINDER_RESURFACE_EVE_PING_URL\" || echo 'HC ping failed (non-fatal)'\n\nOutput a brief summary: N items resurfaced (or 'no active reminders')."
+    }
+  ]
+}

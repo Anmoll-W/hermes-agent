@@ -17305,6 +17305,13 @@ async def start_gateway(config: Optional[GatewayConfig] = None, replace: bool = 
             logger.error("Gateway exiting cleanly: %s", runner.exit_reason)
         return True
     
+    # Seed default cron jobs (idempotent — adds missing jobs, never overwrites existing ones).
+    try:
+        from cron.seed_defaults import seed_default_jobs
+        seed_default_jobs()
+    except Exception as _seed_exc:
+        logger.warning("Failed to seed default cron jobs: %s", _seed_exc)
+
     # Start background cron ticker so scheduled jobs fire automatically.
     # Pass the event loop so cron delivery can use live adapters (E2EE support).
     cron_stop = threading.Event()
