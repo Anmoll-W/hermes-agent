@@ -37,28 +37,52 @@ def seed_default_jobs() -> None:
     existing_names = {j.get("name") for j in existing}
 
     added = 0
+    updated = 0
     for spec in specs:
         name = spec.get("name")
         if not name:
             logger.warning("seed_default_jobs: skipping unnamed job spec: %s", spec)
             continue
-        if name in existing_names:
-            logger.debug("seed_default_jobs: job '%s' already exists — skipping", name)
-            continue
+
+        default_version = spec.get("version", 1)
+        existing_job = next((j for j in existing if j.get("name") == name), None)
+
+        if existing_job is not None:
+            existing_version = existing_job.get("version", 0)
+            if existing_version >= default_version:
+                logger.debug(
+                    "seed_default_jobs: job '%s' already at version %d — skipping",
+                    name, existing_version,
+                )
+                continue
+            # Existing job is older — replace it with the new spec.
+            logger.info(
+                "seed_default_jobs: updating job '%s' from version %d to %d",
+                name, existing_version, default_version,
+            )
+            existing = [j for j in existing if j.get("name") != name]
+            existing_names.discard(name)
+
         try:
             job = create_job(
                 prompt=spec.get("prompt"),
                 schedule=spec.get("schedule", "0 0 * * *"),
                 name=name,
                 deliver=spec.get("deliver", "local"),
+                model=spec.get("model") or None,
             )
+            job["version"] = default_version
             existing.append(job)
             existing_names.add(name)
-            added += 1
-            logger.info("seed_default_jobs: seeded job '%s' (schedule: %s)", name, spec.get("schedule"))
+            if existing_job is not None:
+                updated += 1
+                logger.info("seed_default_jobs: updated job '%s' (schedule: %s)", name, spec.get("schedule"))
+            else:
+                added += 1
+                logger.info("seed_default_jobs: seeded job '%s' (schedule: %s)", name, spec.get("schedule"))
         except Exception as exc:
-            logger.warning("seed_default_jobs: failed to create job '%s': %s", name, exc)
+            logger.warning("seed_default_jobs: failed to create/update job '%s': %s", name, exc)
 
-    if added:
+    if added or updated:
         save_jobs(existing)
-        logger.info("seed_default_jobs: %d default job(s) seeded", added)
+        logger.info("seed_default_jobs: %d job(s) seeded, %d job(s) updated", added, updated)
