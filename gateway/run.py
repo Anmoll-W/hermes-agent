@@ -3827,9 +3827,31 @@ class GatewayRunner:
         # turn so the agent kicks off the new chat.
         asyncio.create_task(self._handoff_watcher())
 
+        # Healthchecks.io dead-man heartbeat — pings HC_GATEWAY_PING_URL every
+        # 5 min so the hermes-gateway monitor stays green while the process runs.
+        asyncio.create_task(self._hc_gateway_heartbeat())
+
         logger.info("Press Ctrl+C to stop")
-        
+
         return True
+
+    async def _hc_gateway_heartbeat(self, interval: int = 300) -> None:
+        """Ping HC_GATEWAY_PING_URL every 5 min while the gateway is alive.
+
+        Keeps the hermes-gateway Healthchecks.io monitor green.
+        Silently no-ops if the env var is unset or the ping fails.
+        """
+        import urllib.request
+        url = os.environ.get("HC_GATEWAY_PING_URL", "").strip()
+        if not url:
+            return
+        while True:
+            try:
+                urllib.request.urlopen(url, timeout=10)
+                logger.debug("HC gateway heartbeat: pinged %s", url)
+            except Exception as exc:
+                logger.debug("HC gateway heartbeat: ping failed (%s)", exc)
+            await asyncio.sleep(interval)
 
     async def _handoff_watcher(self, interval: float = 2.0) -> None:
         """Background task that processes pending CLI→gateway session handoffs.
