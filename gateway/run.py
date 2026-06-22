@@ -2006,9 +2006,11 @@ class GatewayRunner:
                 len(self._failed_platforms),
             )
 
-    def _request_clean_exit(self, reason: str) -> None:
+    def _request_clean_exit(self, reason: str, *, with_failure: bool = False) -> None:
         self._exit_cleanly = True
         self._exit_reason = reason
+        if with_failure:
+            self._exit_with_failure = True
         self._shutdown_event.set()
 
     def _running_agent_count(self) -> int:
@@ -3676,7 +3678,7 @@ class GatewayRunner:
                     write_runtime_status(gateway_state="startup_failed", exit_reason=reason)
                 except Exception:
                     pass
-                self._request_clean_exit(reason)
+                self._request_clean_exit(reason, with_failure=True)
                 return True
             if enabled_platform_count > 0:
                 if startup_retryable_errors:
@@ -17303,7 +17305,7 @@ async def start_gateway(config: Optional[GatewayConfig] = None, replace: bool = 
     if runner.should_exit_cleanly:
         if runner.exit_reason:
             logger.error("Gateway exiting cleanly: %s", runner.exit_reason)
-        return True
+        return not runner.should_exit_with_failure
     
     # Seed default cron jobs (idempotent — adds missing jobs, never overwrites existing ones).
     try:
