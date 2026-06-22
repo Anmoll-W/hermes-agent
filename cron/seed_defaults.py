@@ -59,6 +59,12 @@ def seed_default_scripts() -> None:
 
     copied = 0
     for src in sorted(_BUNDLED_SCRIPTS_DIR.iterdir()):
+        if src.is_dir():
+            logger.warning(
+                "seed_default_scripts: skipping subdirectory %s — only top-level "
+                "scripts are mirrored to the volume", src.name,
+            )
+            continue
         if not src.is_file():
             continue
         dest = dest_dir / src.name
@@ -91,6 +97,21 @@ def seed_default_jobs() -> None:
         logger.info(
             "seed_default_jobs: skipping — '%s' routes through gateway API "
             "(no vault volume). Set HERMES_SEED_JOBS=true to override.",
+            service_name,
+        )
+        return
+
+    # On Railway, HERMES_HOME must point at the persistent volume. If it is
+    # unset, every path below (scripts mirror, jobs.json, the vault clone) falls
+    # back to ~/.hermes on EPHEMERAL container storage — the job would clone,
+    # heartbeat, and ping green, then lose everything on the next redeploy. That
+    # silently recreates the 2026-06-22 outage with a green dead-man's switch.
+    # Refuse loudly instead of degrading silently.
+    if service_name and not os.getenv("HERMES_HOME"):
+        logger.error(
+            "seed_default_jobs: RAILWAY_SERVICE_NAME=%s but HERMES_HOME is unset — "
+            "refusing to seed onto ephemeral storage. Set HERMES_HOME to the volume "
+            "mount (e.g. /opt/data) in the Railway service variables.",
             service_name,
         )
         return

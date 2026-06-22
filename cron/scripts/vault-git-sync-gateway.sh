@@ -40,14 +40,18 @@ export GIT_SSH_COMMAND="ssh -i $KEY_FILE -o StrictHostKeyChecking=accept-new"
 # after its grace period — closing the 11h-silent-outage gap that hid the
 # 2026-06-22 transport failure. Set HC_VAULT_GIT_SYNC_PING_URL in Railway env.
 hc_ping() {  # $1: "" on success, "/fail" on failure
+  # Tight 5s budget: the cron scheduler kills this job at its timeout; a slow
+  # curl here must never eat enough wall-clock to prevent the /fail ping firing.
   [ -n "${HC_VAULT_GIT_SYNC_PING_URL:-}" ] || return 0
-  curl -fsS -m 10 "${HC_VAULT_GIT_SYNC_PING_URL}${1:-}" >/dev/null 2>&1 || true
+  curl -fsS -m 5 "${HC_VAULT_GIT_SYNC_PING_URL}${1:-}" >/dev/null 2>&1 || true
 }
 
 if [ ! -d "$VAULT_DIR/.git" ]; then
   git clone --depth 50 "$REPO" "$VAULT_DIR" || { echo "FATAL clone failed"; hc_ping /fail; exit 1; }
 fi
-cd "$VAULT_DIR"
+# Guard the cd: if $VAULT_DIR vanished between the check and here, every git
+# command below would otherwise run against the wrong repo (the image cwd).
+cd "$VAULT_DIR" || { echo "FATAL cd $VAULT_DIR failed"; hc_ping /fail; exit 1; }
 
 # Repo-level identity: `git pull` creates a MERGE COMMIT whenever local commits and
 # remote commits diverge, and -c flags on the commit command do not cover it —
