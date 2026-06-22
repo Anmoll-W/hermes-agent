@@ -3,20 +3,41 @@
 Reads cron/default_jobs.json and adds any jobs not already present in
 the live jobs.json on the Railway volume. Idempotent — existing jobs
 (matched by name) are never overwritten.
+
+Only runs on the primary gateway service. Services that route output
+through the gateway API (e.g. vault-brain) skip seeding — they have no
+persistent volume and their jobs would fail at every vault file read.
+Set HERMES_SEED_JOBS=true to force seeding on any service.
 """
 from __future__ import annotations
 
 import json
 import logging
+import os
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
 _DEFAULT_JOBS_FILE = Path(__file__).parent / "default_jobs.json"
 
+# Services known to route through the gateway API server for delivery.
+# They have no vault volume and should not run the default job set.
+_PROXY_SERVICES = {"vault-brain"}
+
 
 def seed_default_jobs() -> None:
     """Seed default cron jobs if not already present. Safe to call on every boot."""
+    service_name = os.getenv("RAILWAY_SERVICE_NAME", "")
+    force = os.getenv("HERMES_SEED_JOBS", "").lower() in {"1", "true", "yes"}
+
+    if service_name in _PROXY_SERVICES and not force:
+        logger.info(
+            "seed_default_jobs: skipping — '%s' routes through gateway API "
+            "(no vault volume). Set HERMES_SEED_JOBS=true to override.",
+            service_name,
+        )
+        return
+
     if not _DEFAULT_JOBS_FILE.exists():
         logger.debug("seed_default_jobs: no default_jobs.json found — skipping")
         return
