@@ -3208,6 +3208,12 @@ def run_gateway(verbose: int = 0, quiet: bool = False, replace: bool = False):
     # Exit with code 1 if gateway fails to connect any platform,
     # so systemd Restart=always will retry on transient errors
     verbosity = None if quiet else verbose
+    # Allow env-var override so Railway deployments get INFO logs without
+    # needing a Dockerfile CMD change (HERMES_GATEWAY_VERBOSITY=1 → INFO).
+    if verbosity is not None:
+        env_v = os.environ.get("HERMES_GATEWAY_VERBOSITY", "")
+        if env_v.isdigit():
+            verbosity = max(verbosity, int(env_v))
 
     # ── Exit-path diagnostics ────────────────────────────────────────────
     # When the gateway dies silently on Windows (no shutdown log, no
