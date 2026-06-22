@@ -883,7 +883,7 @@ class TelegramAdapter(BasePlatformAdapter):
         # giving up, so the old session has time to expire.
         self._polling_conflict_count += 1
 
-        MAX_CONFLICT_RETRIES = 3
+        MAX_CONFLICT_RETRIES = 12  # Railway rolling updates can take ~90s; 12×10s = 120s headroom
         RETRY_DELAY = 10  # seconds
 
         if self._polling_conflict_count <= MAX_CONFLICT_RETRIES:
