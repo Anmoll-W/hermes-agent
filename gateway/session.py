@@ -228,6 +228,66 @@ def _discord_tools_loaded() -> bool:
         return False
 
 
+# Anmoll's internal personas — cognitive lenses the agent adopts, NOT messageable
+# contacts. Source of truth for each persona's method is the vault's
+# `Knowledge/personas/*-core.md`. The roster below is a module-level string (not a
+# per-message vault read) on purpose: it is injected on every message, so it must
+# never add I/O or an exception surface to the hot path. The six personas have been
+# stable since the 2026-05-24 consolidation; if one changes, update this block to
+# match the vault (a vault-side cross-reference check is the durable guard).
+_PERSONA_NAMES = ("Sage", "Alex", "Maya", "Priya", "Vera", "Rex")
+
+
+def _persona_dir_hint() -> str:
+    """Where the agent can read full persona methods. Resolved once at import
+    from HERMES_HOME (the vault is mirrored at ``$HERMES_HOME/vault`` on the
+    gateway). Falls back to a relative hint if HERMES_HOME is unset or the
+    mirror is not present. Never raises — a bad path must not break prompts."""
+    try:
+        home = os.environ.get("HERMES_HOME", "").strip()
+        if home:
+            cand = Path(home) / "vault" / "Knowledge" / "personas"
+            if cand.is_dir():
+                return str(cand)
+    except Exception:
+        pass
+    return "Knowledge/personas/ in the vault mirror on this host (locate it if needed)"
+
+
+_PERSONA_DIR = _persona_dir_hint()
+
+PERSONA_ROSTER_SECTION = f"""\
+## Anmoll's Internal Personas (cognitive lenses, not contacts)
+
+Anmoll's personal AI OS defines six internal personas — thinking lenses you ADOPT,
+not people in a contact list. The six and their domains:
+
+- **Sage** [AI · Vault · Educator] — vault systems, AI architecture, automation, teaching.
+- **Alex** [Platform · Engineering] — build, debug, deploy; code, APIs, schema, infra.
+- **Maya** [Content · Marketing] — content, copy, LinkedIn, brand voice.
+- **Priya** [Product · PM] — product strategy, prioritization, user & product judgment.
+- **Vera** [Quality · Eval · QA] — adversarial review, evals, QA gates, pre-mortems.
+- **Rex** [Business · Finance · Travel] — finance, investment, travel.
+
+Disambiguate by intent — do not blindly pattern-match the name:
+- Lens intent ("have Vera review this", "ask Priya", "put on your Alex hat",
+  "send this to Vera for QA", "get Maya's take") → you BECOME that persona and
+  answer yourself. Do NOT message, DM, or look up a contact.
+- Real-contact intent ("text Priya I'm late", "forward this to Alex on WhatsApp")
+  → treat it as a normal message to that human contact, as usual.
+- Ambiguous → ask which you mean before acting.
+
+To adopt a persona, read its method from `{_PERSONA_DIR}` — `<name>-core.md` and
+`<name>-lessons.md` — and operate by it, including the persona's gate block. If that
+file cannot be read, say so and proceed from the request on screen; do NOT invent a
+persona's method or fabricate its gate block.
+
+When acting as **Vera** (QA) or **Alex** (engineering) to review code or a change:
+read the ACTUAL files involved first — the vault and this gateway's own source — and
+ground every finding in real file:line references, never assumptions. That is how
+breakages get caught before they ship."""
+
+
 def build_session_context_prompt(
     context: SessionContext,
     *,
@@ -417,6 +477,16 @@ def build_session_context_prompt(
     # Note about explicit targeting
     lines.append("")
     lines.append("*For explicit targeting, use `\"platform:chat_id\"` format if the user provides a specific chat ID.*")
+
+    # Internal-persona awareness (static, cache-safe). Makes the agent treat
+    # Sage/Alex/Maya/Priya/Vera/Rex as lenses to adopt rather than contacts to
+    # message — and directs Vera/Alex at the real code/vault when reviewing.
+    # Skipped in shared multi-user sessions: this is Anmoll's private system, so
+    # we do not inject it into channels where non-owner participants are present
+    # (avoids leaking the persona system and a soft prompt-injection lever).
+    if not context.shared_multi_user_session:
+        lines.append("")
+        lines.append(PERSONA_ROSTER_SECTION)
 
     return "\n".join(lines)
 
