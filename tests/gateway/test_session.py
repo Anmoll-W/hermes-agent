@@ -195,6 +195,109 @@ class TestBuildSessionContextPrompt:
         assert "Telegram" in prompt
         assert "Home Chat" in prompt
 
+    @staticmethod
+    def _dm_prompt(platform=Platform.LOCAL, *, redact_pii=False, user_name=None):
+        """Build a single-user DM prompt for the given platform."""
+        config = GatewayConfig(
+            platforms={platform: PlatformConfig(enabled=True, token="fake-token")},
+        )
+        source = SessionSource(
+            platform=platform,
+            chat_id="111",
+            chat_name="Home Chat",
+            chat_type="dm",
+            user_name=user_name,
+        )
+        ctx = build_session_context(source, config)
+        return build_session_context_prompt(ctx, redact_pii=redact_pii)
+
+    def test_prompt_contains_internal_persona_roster(self):
+        # The agent must know the six internal personas are lenses to adopt,
+        # not contacts to message — this is what stopped the "can't find Priya"
+        # behavior on Telegram. Assertions use stable concepts (names + lowercased
+        # intent words), not exact prose, so harmless wording edits don't break CI.
+        prompt = self._dm_prompt(Platform.TELEGRAM)
+        for persona in ("Sage", "Alex", "Maya", "Priya", "Vera", "Rex"):
+            assert persona in prompt, f"persona {persona} missing from roster"
+        low = prompt.lower()
+        assert "not contacts" in low            # personas are lenses, not contacts
+        assert "adopt" in low and "become" in low  # lens-adoption instruction
+        assert "file:line" in low               # Vera/Alex grounded in real code
+
+    def test_persona_roster_disambiguates_real_contacts(self):
+        # Regression guard: must NOT hard-block messaging a real human who happens
+        # to share a persona name (Priya/Alex/Maya). Both intents + ambiguity path
+        # must be present.
+        low = self._dm_prompt(Platform.TELEGRAM).lower()
+        assert "lens intent" in low
+        assert "real-contact intent" in low
+        assert "ambiguous" in low
+
+    def test_persona_roster_failsafe_when_file_missing(self):
+        # If the persona file can't be read, the agent must say so and NOT
+        # fabricate a method/gate (Vera finding: fake-QA-gate hallucination).
+        low = self._dm_prompt(Platform.TELEGRAM).lower()
+        assert "cannot be read" in low
+        assert "do not invent" in low or "fabricate" in low
+
+    @pytest.mark.parametrize(
+        "platform",
+        [Platform.LOCAL, Platform.TELEGRAM, Platform.DISCORD, Platform.SLACK, Platform.BLUEBUBBLES],
+    )
+    def test_persona_roster_present_across_platforms(self, platform):
+        # Static roster appears for every platform in single-user DM sessions.
+        assert "Internal Personas" in self._dm_prompt(platform)
+
+    def test_persona_roster_skipped_in_shared_multiuser(self):
+        # Anmoll's private persona system must not leak into shared group channels.
+        config = GatewayConfig(
+            platforms={Platform.SLACK: PlatformConfig(enabled=True, token="fake-token")},
+        )
+        source = SessionSource(
+            platform=Platform.SLACK, chat_id="C1", chat_name="team", chat_type="group",
+        )
+        ctx = build_session_context(source, config)
+        ctx.shared_multi_user_session = True
+        prompt = build_session_context_prompt(ctx)
+        assert "Internal Personas" not in prompt
+
+    def test_persona_roster_is_cache_stable_across_users(self):
+        # Prompt-cache safety: the roster block is byte-identical regardless of
+        # per-turn user identity (it must never introduce per-turn variation).
+        from gateway.session import PERSONA_ROSTER_SECTION
+        a = self._dm_prompt(Platform.TELEGRAM, user_name="alice")
+        b = self._dm_prompt(Platform.TELEGRAM, user_name="bob")
+        assert PERSONA_ROSTER_SECTION in a
+        assert PERSONA_ROSTER_SECTION in b
+
+    def test_persona_roster_present_under_pii_redaction(self):
+        # Redaction strips IDs earlier in the prompt; the roster (appended after)
+        # must still be present and unchanged.
+        from gateway.session import PERSONA_ROSTER_SECTION
+        assert PERSONA_ROSTER_SECTION in self._dm_prompt(Platform.TELEGRAM, redact_pii=True)
+
+    def test_roster_names_match_vault_when_reachable(self):
+        # Durable staleness guard: when the vault persona dir is actually mounted
+        # (HERMES_HOME/vault/...), the hardcoded roster must equal the *-core.md
+        # stems exactly. Skips when the vault isn't reachable (e.g. CI).
+        import os
+        from gateway.session import _PERSONA_NAMES
+        home = os.environ.get("HERMES_HOME", "").strip()
+        if not home:
+            pytest.skip("HERMES_HOME unset — vault not reachable")
+        pdir = Path(home) / "vault" / "Knowledge" / "personas"
+        if not pdir.is_dir():
+            pytest.skip("vault personas dir not mounted")
+        suffix = "-core.md"
+        stems = {p.name[: -len(suffix)].lower() for p in pdir.glob("*" + suffix)}
+        roster = {n.lower() for n in _PERSONA_NAMES}
+        # Equality, not subset: this also fails if the vault gains a persona the
+        # hardcoded roster hasn't been updated for (the likeliest drift direction).
+        assert roster == stems, (
+            f"roster/vault drift — only-in-roster: {roster - stems}, "
+            f"only-in-vault: {stems - roster}"
+        )
+
     def test_bluebubbles_prompt_mentions_short_conversational_i_message_format(self):
         config = GatewayConfig(
             platforms={
