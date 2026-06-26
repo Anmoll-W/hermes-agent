@@ -84,6 +84,16 @@ if ! git diff --cached --quiet 2>/dev/null; then
     commit -q -m "hermes: gateway sync $(date -u '+%F %T') UTC"
 fi
 
+# Discard non-write-zone drift BEFORE pulling. A tracked file that another gateway
+# cron writes but this script never commits (e.g. Knowledge/automation-health.md —
+# not a WRITE_ZONE) leaves the tree dirty; `git pull` then aborts to avoid
+# overwriting it, push never runs, and commits pile up unpushed. The post-push
+# cleanup below could not break that deadlock because it ran only AFTER a
+# successful push. Write-zone changes are already committed above, so discarding
+# the remaining tracked drift here is safe. (Root cause of the 2026-06-25 17:30
+# UTC 12h heartbeat freeze.)
+git checkout -q -- . 2>/dev/null
+
 git pull --no-rebase -X theirs -q origin main || { echo "VAULT SYNC: PULL FAILED $(date -u '+%F %T')"; hc_ping /fail; exit 1; }
 git push -q origin main || { echo "VAULT SYNC: PUSH FAILED $(date -u '+%F %T')"; hc_ping /fail; exit 1; }
 
