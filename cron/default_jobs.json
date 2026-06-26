@@ -42,9 +42,9 @@
     },
     {
       "name": "vault-git-sync",
-      "version": 1,
+      "version": 2,
       "schedule": "*/15 * * * *",
-      "deliver": "local",
+      "deliver": "telegram",
       "no_agent": true,
       "script": "vault-git-sync-gateway.sh",
       "prompt": null
